@@ -82,9 +82,81 @@ async function typeIntoField(
   await input.type(value, { delay });
 }
 
+/**
+ * Full login flow: navigate to Meroshare, resolve DP, fill form, intercept
+ * the login POST with the correct clientId, click Login, wait for dashboard.
+ */
+async function loginToMeroshare(
+  page: import('@playwright/test').Page,
+  baseUrl: string,
+  cred: Credential,
+  dpCode: string,
+) {
+  // Navigate to login page
+  await page.goto(baseUrl);
+  await page.waitForURL('**/login', { timeout: 15000 });
+
+  // Resolve the correct DP clientId from the API
+  const dpList = await captureDPList(page);
+  const targetDP = dpList.find((dp) => dp.code === dpCode);
+  if (!targetDP) {
+    throw new Error(`DP with code ${dpCode} not found. Available: ${dpList.length} DPs`);
+  }
+  console.log(`[DP] Resolved: id=${targetDP.id}, code=${targetDP.code}, name="${targetDP.name}"`);
+
+  // Intercept the login POST and fix clientId
+  await page.route('**/api/meroShare/auth/**', async (route) => {
+    const req = route.request();
+    if (req.method() === 'POST') {
+      const payload = req.postDataJSON();
+      if (payload.clientId === 0) {
+        payload.clientId = targetDP.id;
+      }
+      await route.continue({ postData: JSON.stringify(payload) });
+    } else {
+      await route.continue();
+    }
+  });
+
+  // Fill the login form
+  console.log(`Logging in as "${cred.username}" with DP "${targetDP.name}" ...`);
+
+  await selectDPInDropdown(page, dpCode);
+
+  const usernameInput = page.locator('input[type="text"]').first();
+  await typeIntoField(usernameInput, cred.username);
+
+  const passwordInput = page.locator('input[type="password"]');
+  await typeIntoField(passwordInput, cred.password);
+  await page.waitForTimeout(500);
+
+  // Click Login and wait for API response
+  const loginButton = page.locator('button').filter({ hasText: /login/i }).first();
+  await expect(loginButton).toBeEnabled();
+
+  const loginResponsePromise = page.waitForResponse(
+    (resp) => resp.url().includes('/api/meroShare/auth') && resp.request().method() === 'POST',
+    { timeout: 20000 },
+  );
+
+  await loginButton.click();
+
+  const loginResponse = await loginResponsePromise;
+  const status = loginResponse.status();
+  if (status !== 200) {
+    const body = await loginResponse.text().catch(() => '(unreadable)');
+    throw new Error(`Login failed with HTTP ${status}: ${body}`);
+  }
+
+  // Wait for dashboard
+  await page.waitForURL('**/dashboard', { timeout: 15000 });
+  console.log('[OK] Logged in and on dashboard');
+}
+
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const DP_CODE = '10700'; // LAXMI SUNRISE CAPITAL LIMITED
+const MAX_REPORTS_TO_PROCESS = 5; // Number of application reports to open and inspect
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
@@ -101,122 +173,191 @@ test.describe('Meroshare Login', () => {
     const credentials = loadCredentials();
     const cred = credentials.Dad;
 
-    // Navigate to Meroshare login page
     await page.goto(baseUrl!);
     await page.waitForURL('**/login', { timeout: 15000 });
 
-    // ── 1. Select Depository Participant ──────────────────────────────────
+    // 1. Select Depository Participant
     const dpOption = await selectDPInDropdown(page, DP_CODE);
     const dpText = await dpOption.textContent();
     console.log(`[OK] DP selected: "${dpText?.trim()}"`);
 
-    // ── 2. Fill Username (DMAT number) ───────────────────────────────────
+    // 2. Fill Username
     const usernameInput = page.locator('input[type="text"]').first();
     await typeIntoField(usernameInput, cred.username);
     await expect(usernameInput).toHaveValue(cred.username);
     console.log(`[OK] Username filled: ${cred.username}`);
 
-    // ── 3. Fill Password ─────────────────────────────────────────────────
+    // 3. Fill Password
     const passwordInput = page.locator('input[type="password"]');
     await typeIntoField(passwordInput, cred.password);
     const passwordLength = (await passwordInput.inputValue()).length;
     expect(passwordLength).toBeGreaterThan(0);
     console.log(`[OK] Password filled: ${passwordLength} characters`);
 
-    // ── 4. Verify Login button is enabled ────────────────────────────────
+    // 4. Verify Login button is enabled
     const loginButton = page.locator('button').filter({ hasText: /login/i }).first();
     await expect(loginButton).toBeEnabled();
     console.log('[OK] Login button is enabled');
 
-    // Screenshot of the filled form
     await page.screenshot({ path: 'test-results/login-form-filled.png', fullPage: true });
-    console.log('[OK] Screenshot: test-results/login-form-filled.png');
   });
 
   test('should login successfully with Dad credentials', async ({ page }) => {
     const credentials = loadCredentials();
-    const cred = credentials.Dad;
+    await loginToMeroshare(page, baseUrl!, credentials.Dad, DP_CODE);
 
-    // Navigate to Meroshare login page
-    await page.goto(baseUrl!);
-    await page.waitForURL('**/login', { timeout: 15000 });
-
-    // ── Resolve the correct DP clientId from the API ─────────────────────
-    // Angular's select binding doesn't propagate to the model via Playwright's
-    // selectOption, so we intercept the login POST and inject the correct clientId.
-    const dpList = await captureDPList(page);
-    const targetDP = dpList.find((dp) => dp.code === DP_CODE);
-    if (!targetDP) {
-      throw new Error(`DP with code ${DP_CODE} not found in API. Available: ${dpList.length} DPs`);
-    }
-    console.log(`[DP] Resolved: id=${targetDP.id}, code=${targetDP.code}, name="${targetDP.name}"`);
-
-    // Intercept the login POST and fix clientId (Angular select doesn't bind
-    // properly via Playwright's selectOption, sending clientId=0 instead)
-    await page.route('**/api/meroShare/auth/**', async (route) => {
-      const req = route.request();
-      if (req.method() === 'POST') {
-        const payload = req.postDataJSON();
-        if (payload.clientId === 0) {
-          payload.clientId = targetDP.id;
-        }
-        await route.continue({ postData: JSON.stringify(payload) });
-      } else {
-        await route.continue();
-      }
-    });
-
-    // ── Fill the login form ──────────────────────────────────────────────
-    console.log(`Logging in as "${cred.username}" with DP "${targetDP.name}" ...`);
-
-    await selectDPInDropdown(page, DP_CODE);
-
-    const usernameInput = page.locator('input[type="text"]').first();
-    await typeIntoField(usernameInput, cred.username);
-
-    const passwordInput = page.locator('input[type="password"]');
-    await typeIntoField(passwordInput, cred.password);
-    await page.waitForTimeout(500);
-
-    // Screenshot before submitting
-    await page.screenshot({ path: 'test-results/login-before-submit.png', fullPage: true });
-
-    // ── Click Login ──────────────────────────────────────────────────────
-    const loginButton = page.locator('button').filter({ hasText: /login/i }).first();
-    await expect(loginButton).toBeEnabled();
-
-    // Listen for the login API response
-    const loginResponsePromise = page.waitForResponse(
-      (resp) => resp.url().includes('/api/meroShare/auth') && resp.request().method() === 'POST',
-      { timeout: 20000 },
-    );
-
-    await loginButton.click();
-    console.log('Login button clicked');
-
-    const loginResponse = await loginResponsePromise;
-    const status = loginResponse.status();
-    console.log(`Login API: HTTP ${status}`);
-
-    if (status !== 200) {
-      const body = await loginResponse.text().catch(() => '(unreadable)');
-      console.log(`API error: ${body}`);
-      await page.screenshot({ path: 'test-results/login-failed.png', fullPage: true });
-      throw new Error(`Login failed with HTTP ${status}: ${body}`);
-    }
-
-    // ── Verify successful login ──────────────────────────────────────────
-    await page.waitForURL('**/dashboard', { timeout: 15000 });
+    // Verify dashboard
     expect(page.url()).toContain('/dashboard');
-    console.log('[OK] Navigated to dashboard');
-
-    // Verify dashboard content loaded (sidebar navigation items)
     const sidebarNav = page.locator('.sidebar-nav');
     await expect(sidebarNav).toBeVisible({ timeout: 10000 });
-    console.log('[OK] Dashboard sidebar loaded');
 
-    // Take success screenshot
     await page.screenshot({ path: 'test-results/login-success.png', fullPage: true });
     console.log('[OK] Login successful!');
+  });
+
+  test('should navigate to My ASBA and log content', async ({ page, }, testInfo) => {
+    // This test iterates through many application report records
+    testInfo.setTimeout(5 * 60 * 1000); // 5 minutes
+    const credentials = loadCredentials();
+    await loginToMeroshare(page, baseUrl!, credentials.Dad, DP_CODE);
+
+    // ── Navigate to My ASBA via sidebar ──────────────────────────────────
+    const asbaLink = page.locator('a[href="#/asba"]');
+    await asbaLink.waitFor({ state: 'visible', timeout: 10000 });
+    await asbaLink.click();
+    console.log('[NAV] Clicked "My ASBA" in sidebar');
+
+    await page.waitForURL('**/asba', { timeout: 15000 });
+    console.log(`[NAV] URL: ${page.url()}`);
+
+    // Wait for the ASBA page content to load
+    await page.waitForTimeout(3000);
+
+    // ── Log the tabs ─────────────────────────────────────────────────────
+    const tabs = page.locator('.page-title-action-tab .nav-item');
+    const tabCount = await tabs.count();
+    console.log(`\n=== MY ASBA PAGE ===`);
+    console.log(`Tabs found: ${tabCount}`);
+    for (let i = 0; i < tabCount; i++) {
+      const tabText = await tabs.nth(i).textContent();
+      const isActive = (await tabs.nth(i).locator('a').getAttribute('class'))?.includes('active');
+      console.log(`  [${isActive ? 'ACTIVE' : '      '}] ${tabText?.trim()}`);
+    }
+
+    // ── Log "Apply for Issue" content (default active tab) ───────────────
+    console.log(`\n--- Apply for Issue ---`);
+    const companyItems = page.locator('.company-list');
+    const itemCount = await companyItems.count();
+    console.log(`Companies listed: ${itemCount}`);
+
+    if (itemCount === 0) {
+      console.log('(no companies available for application)');
+      console.log('[NAV] Switching to "Application Report" tab ...');
+
+      // ── Click "Application Report" tab ───────────────────────────────────
+      const appReportTab = page.locator('.page-title-action-tab .nav-item a')
+        .filter({ hasText: 'Application Report' }).first();
+      await appReportTab.click();
+      // Wait for company-list items to appear
+      await page.locator('.company-list').first().waitFor({ state: 'visible', timeout: 10000 });
+      await page.waitForTimeout(1000);
+
+      await page.screenshot({ path: 'test-results/my-asba-app-report.png', fullPage: true });
+
+      // ── Collect all application report items ─────────────────────────────
+      const reportItems = page.locator('.company-list');
+      const reportCount = await reportItems.count();
+      console.log(`\n--- Application Report ---`);
+      const processCount = Math.min(reportCount, MAX_REPORTS_TO_PROCESS);
+      console.log(`Records found: ${reportCount} (processing first ${processCount})\n`);
+
+      // First pass: collect company names + share types from the list
+      const records: { name: string; subGroup: string; shareType: string }[] = [];
+      for (let i = 0; i < processCount; i++) {
+        const item = reportItems.nth(i);
+        const nameEl = item.locator('.company-name span[tooltip="Company Name"]');
+        const companyName = (await nameEl.textContent().catch(() => ''))?.trim() || 'N/A';
+        const subGroupEl = item.locator('.company-name span[tooltip="Sub Group"]');
+        const subGroup = (await subGroupEl.textContent().catch(() => ''))?.trim() || 'N/A';
+        const shareTypeEl = item.locator('.share-of-type');
+        const shareType = (await shareTypeEl.textContent().catch(() => ''))?.trim() || 'N/A';
+        records.push({ name: companyName, subGroup, shareType });
+      }
+
+      // Second pass: click each record, extract Status + Remarks, navigate back
+      for (let i = 0; i < processCount; i++) {
+        const { name, subGroup, shareType } = records[i];
+
+        // Re-query the list item (DOM may have been refreshed after navigation)
+        const currentItems = page.locator('.company-list');
+        const currentItem = currentItems.nth(i);
+
+        // Scroll the item into view and click the action button (or the row itself)
+        await currentItem.scrollIntoViewIfNeeded();
+        const viewBtn = currentItem.locator('.action-buttons button:visible, .action-buttons i:visible').first();
+        const hasBtnCount = await viewBtn.count();
+        if (hasBtnCount > 0) {
+          await viewBtn.click();
+        } else {
+          await currentItem.click();
+        }
+
+        // Wait for the detail page to load (URL or content change)
+        await page.waitForTimeout(1500);
+
+        // Extract Status and Remarks from the detail page
+        const mainContent = page.locator('main#main');
+        const detailText = await mainContent.innerText();
+        const lines = detailText.split('\n').map((l) => l.trim()).filter(Boolean);
+
+        let status = 'N/A';
+        let remarks = 'N/A';
+
+        for (let l = 0; l < lines.length; l++) {
+          if (lines[l].toLowerCase() === 'status' && l + 1 < lines.length) {
+            status = lines[l + 1];
+          }
+          if (lines[l].toLowerCase() === 'remarks' && l + 1 < lines.length) {
+            remarks = lines[l + 1];
+          }
+        }
+
+        console.log(`  [${i + 1}/${reportCount}] ${name} (${shareType})`);
+        console.log(`    Status:  ${status}`);
+        console.log(`    Remarks: ${remarks}`);
+
+        // Navigate back
+        await page.goBack();
+        await page.waitForTimeout(1000);
+
+        // We're back on the ASBA page — ensure the Application Report tab is active
+        const tabsContainer = page.locator('.page-title-action-tab');
+        await tabsContainer.waitFor({ state: 'visible', timeout: 10000 });
+
+        const activeTab = page.locator('.page-title-action-tab .nav-item a.active');
+        const activeTabText = (await activeTab.textContent().catch(() => ''))?.trim();
+        if (!activeTabText?.includes('Application Report')) {
+          const tab = page.locator('.page-title-action-tab .nav-item a')
+            .filter({ hasText: 'Application Report' }).first();
+          await tab.click();
+          await page.waitForTimeout(1500);
+        }
+      }
+    } else {
+      // Log the Apply for Issue items
+      for (let i = 0; i < itemCount; i++) {
+        const item = companyItems.nth(i);
+        const nameEl = item.locator('.company-name span[tooltip="Company Name"]');
+        const companyName = (await nameEl.textContent().catch(() => ''))?.trim() || 'N/A';
+        const shareTypeEl = item.locator('.share-of-type');
+        const shareType = (await shareTypeEl.textContent().catch(() => ''))?.trim() || 'N/A';
+        console.log(`  [${i + 1}] ${companyName} | ${shareType}`);
+      }
+    }
+
+    console.log(`\n=== END MY ASBA ===`);
+
+    await page.screenshot({ path: 'test-results/my-asba.png', fullPage: true });
+    console.log('[OK] Screenshot: test-results/my-asba.png');
   });
 });
