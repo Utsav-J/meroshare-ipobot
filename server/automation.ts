@@ -16,11 +16,20 @@ interface DPInfo {
   name: string;
 }
 
+export type AccountStatusType = 'pending' | 'running' | 'already_applied' | 'success' | 'error' | 'login_failed';
+
+export interface AccountStatus {
+  account: string;
+  status: AccountStatusType;
+  message: string;
+}
+
 export type AutomationEvent =
   | { type: 'log'; message: string }
   | { type: 'issue'; data: { name: string; subGroup: string; shareType: string; shareGroup: string } }
   | { type: 'report'; data: { index: number; total: number; name: string; shareType: string; status: string; remarks: string } }
   | { type: 'apply_success'; message: string }
+  | { type: 'account_status'; data: AccountStatus }
   | { type: 'done' }
   | { type: 'error'; message: string };
 
@@ -32,8 +41,13 @@ const DP_CODE = '10700'; // LAXMI SUNRISE CAPITAL LIMITED
 // ── Credential Loader ────────────────────────────────────────────────────────
 
 export function loadAllCredentials(): Record<string, Credential> {
-  const filePath = path.resolve(__dirname, '..', 'all_credentials.json');
-  return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  const allCredsPath = path.resolve(__dirname, '..', 'all_credentials.json');
+  if (fs.existsSync(allCredsPath)) {
+    return JSON.parse(fs.readFileSync(allCredsPath, 'utf-8'));
+  }
+  // Fallback to credentials.json
+  const credsPath = path.resolve(__dirname, '..', 'credentials.json');
+  return JSON.parse(fs.readFileSync(credsPath, 'utf-8'));
 }
 
 // ── Playwright Helpers (extracted from tests/login.spec.ts) ──────────────────
@@ -285,6 +299,64 @@ export async function runMeroshareAutomation(
   }
 }
 
+// ── Scan-Only Function ──────────────────────────────────────────────────────
+
+export async function scanForIssues(
+  accountName: string,
+  cred: Credential,
+  onEvent: (event: AutomationEvent) => void,
+): Promise<void> {
+  let browser: Browser | null = null;
+
+  try {
+    onEvent({ type: 'log', message: `Scanning for open issues using "${accountName}" ...` });
+
+    browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
+    const page = await context.newPage();
+
+    await loginToMeroshare(page, cred, DP_CODE, onEvent);
+
+    // Navigate to My ASBA
+    const asbaLink = page.locator('a[href="#/asba"]');
+    await asbaLink.waitFor({ state: 'visible', timeout: 10000 });
+    await asbaLink.click();
+    await page.waitForURL('**/asba', { timeout: 15000 });
+    onEvent({ type: 'log', message: 'Navigated to My ASBA' });
+    await page.waitForTimeout(3000);
+
+    // Scrape the "Apply for Issue" tab (default active tab)
+    const companyItems = page.locator('.company-list');
+    const itemCount = await companyItems.count();
+
+    if (itemCount > 0) {
+      onEvent({ type: 'log', message: `Found ${itemCount} open issue(s)` });
+      for (let i = 0; i < itemCount; i++) {
+        const item = companyItems.nth(i);
+        const nameEl = item.locator('.company-name span[tooltip="Company Name"]');
+        const companyName = (await nameEl.textContent().catch(() => ''))?.trim() || 'N/A';
+        const subGroupEl = item.locator('.company-name span[tooltip="Sub Group"]');
+        const subGroup = (await subGroupEl.textContent().catch(() => ''))?.trim() || 'N/A';
+        const shareTypeEl = item.locator('.share-of-type');
+        const shareType = (await shareTypeEl.textContent().catch(() => ''))?.trim() || 'N/A';
+        const shareGroupEl = item.locator('.isin');
+        const shareGroup = (await shareGroupEl.textContent().catch(() => ''))?.trim() || 'N/A';
+        onEvent({ type: 'issue', data: { name: companyName, subGroup, shareType, shareGroup } });
+      }
+    } else {
+      onEvent({ type: 'log', message: 'No open issues found' });
+    }
+
+    onEvent({ type: 'done' });
+  } catch (err: any) {
+    onEvent({ type: 'error', message: err.message || String(err) });
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
+  }
+}
+
 // ── IPO Application Function ────────────────────────────────────────────────
 
 /**
@@ -466,4 +538,209 @@ export async function applyForIPO(
       await browser.close();
     }
   }
+}
+
+// ── Bulk Apply Function ─────────────────────────────────────────────────────
+
+/**
+ * Apply for a specific IPO across multiple accounts sequentially.
+ * For each account: login → ASBA → find IPO by name → check Apply vs Edit → apply.
+ */
+export async function bulkApplyForIPO(
+  accountEntries: { name: string; cred: Credential }[],
+  targetCompanyName: string,
+  appliedKitta: string,
+  defaultPIN: string,
+  accountPINs: Record<string, string>,
+  onEvent: (event: AutomationEvent) => void,
+): Promise<void> {
+  onEvent({ type: 'log', message: `Bulk apply starting for "${targetCompanyName}" across ${accountEntries.length} account(s)` });
+
+  for (const entry of accountEntries) {
+    const { name: accountName, cred } = entry;
+    let browser: Browser | null = null;
+
+    onEvent({
+      type: 'account_status',
+      data: { account: accountName, status: 'running', message: 'Logging in...' },
+    });
+
+    try {
+      browser = await chromium.launch({ headless: true });
+      const context = await browser.newContext();
+      const page = await context.newPage();
+
+      // ── Login ──────────────────────────────────────────────────────────
+      try {
+        await loginToMeroshare(page, cred, DP_CODE, onEvent);
+      } catch (loginErr: any) {
+        onEvent({
+          type: 'account_status',
+          data: {
+            account: accountName,
+            status: 'login_failed',
+            message: `Login failed: ${loginErr.message || String(loginErr)}`,
+          },
+        });
+        continue; // skip to next account
+      }
+
+      // ── Navigate to My ASBA ────────────────────────────────────────────
+      const asbaLink = page.locator('a[href="#/asba"]');
+      await asbaLink.waitFor({ state: 'visible', timeout: 10000 });
+      await asbaLink.click();
+      await page.waitForURL('**/asba', { timeout: 15000 });
+      await page.waitForTimeout(3000);
+
+      // ── Find the target company by name ────────────────────────────────
+      const companyItems = page.locator('.company-list');
+      const itemCount = await companyItems.count();
+
+      if (itemCount === 0) {
+        onEvent({
+          type: 'account_status',
+          data: { account: accountName, status: 'error', message: 'No open issues found on this account' },
+        });
+        continue;
+      }
+
+      let targetIndex = -1;
+      for (let i = 0; i < itemCount; i++) {
+        const item = companyItems.nth(i);
+        const nameEl = item.locator('.company-name span[tooltip="Company Name"]');
+        const name = (await nameEl.textContent().catch(() => ''))?.trim() || '';
+        if (name.toLowerCase() === targetCompanyName.toLowerCase()) {
+          targetIndex = i;
+          break;
+        }
+      }
+
+      if (targetIndex === -1) {
+        onEvent({
+          type: 'account_status',
+          data: { account: accountName, status: 'error', message: `IPO "${targetCompanyName}" not found in this account's issue list` },
+        });
+        continue;
+      }
+
+      const targetItem = companyItems.nth(targetIndex);
+
+      // ── Detect Apply vs Edit button ────────────────────────────────────
+      // Check all visible buttons in this IPO item to detect Apply vs Edit
+      const buttons = targetItem.locator('button');
+      const btnCount = await buttons.count();
+      let applyBtn: any = null;
+      let hasEdit = false;
+
+      for (let b = 0; b < btnCount; b++) {
+        const btn = buttons.nth(b);
+        const visible = await btn.isVisible().catch(() => false);
+        if (!visible) continue;
+        const btnText = ((await btn.textContent()) || '').trim().toLowerCase();
+        if (btnText === 'edit') {
+          hasEdit = true;
+        } else if (btnText === 'apply') {
+          applyBtn = btn;
+        }
+      }
+
+      if (hasEdit && !applyBtn) {
+        onEvent({
+          type: 'account_status',
+          data: { account: accountName, status: 'already_applied', message: 'Already applied (Edit button found)' },
+        });
+        continue;
+      }
+
+      if (!applyBtn) {
+        onEvent({
+          type: 'account_status',
+          data: { account: accountName, status: 'error', message: 'No Apply button found for this IPO' },
+        });
+        continue;
+      }
+
+      // ── Click Apply and fill the form ──────────────────────────────────
+      onEvent({
+        type: 'account_status',
+        data: { account: accountName, status: 'running', message: 'Filling application form...' },
+      });
+
+      await applyBtn.click();
+      await page.waitForTimeout(3000);
+
+      // Fill Bank
+      const bankSelect = page.locator('select#selectBank');
+      await selectFirstRealOption(bankSelect, 'Bank');
+      await page.waitForTimeout(2000);
+
+      // Fill Account Number (appears dynamically after bank)
+      const accountSelect = page.locator('main#main select').nth(1);
+      await selectFirstRealOption(accountSelect, 'Account Number');
+      await page.waitForTimeout(2000);
+
+      // Fill Applied Kitta
+      const kittaInput = page.locator('input#appliedKitta');
+      await typeIntoField(kittaInput, appliedKitta);
+      await kittaInput.dispatchEvent('input');
+      await kittaInput.dispatchEvent('change');
+      await kittaInput.press('Tab');
+      await page.waitForTimeout(1500);
+
+      // Fill CRN
+      const crnInput = page.locator('input#crnNumber');
+      await typeIntoField(crnInput, cred.CRN);
+      await page.waitForTimeout(500);
+
+      // Check declaration checkbox
+      const disclaimer = page.locator('input#disclaimer');
+      const isChecked = await disclaimer.isChecked();
+      if (!isChecked) {
+        await disclaimer.click({ force: true });
+      }
+
+      // Click Proceed
+      const proceedBtn = page.locator('button').filter({ hasText: /proceed/i }).first();
+      await proceedBtn.click();
+      await page.waitForTimeout(3000);
+
+      // Enter Transaction PIN (per-account override or default)
+      const pin = accountPINs[accountName] || defaultPIN;
+      const pinInput = page.locator('input#transactionPIN');
+      await pinInput.waitFor({ state: 'visible', timeout: 10000 });
+      await typeIntoField(pinInput, pin);
+      await page.waitForTimeout(500);
+
+      // Click final Apply button
+      const finalBtn = page.locator('button').filter({ hasText: /apply/i }).first();
+      await finalBtn.waitFor({ state: 'visible', timeout: 5000 });
+      await finalBtn.click();
+      await page.waitForTimeout(5000);
+
+      // Check result
+      const bodyText = await page.locator('body').innerText();
+      if (bodyText.toLowerCase().includes('success') || bodyText.toLowerCase().includes('applied')) {
+        onEvent({
+          type: 'account_status',
+          data: { account: accountName, status: 'success', message: 'Application submitted successfully' },
+        });
+      } else {
+        onEvent({
+          type: 'account_status',
+          data: { account: accountName, status: 'success', message: 'Application submitted. Check Meroshare for confirmation.' },
+        });
+      }
+    } catch (err: any) {
+      onEvent({
+        type: 'account_status',
+        data: { account: accountName, status: 'error', message: err.message || String(err) },
+      });
+    } finally {
+      if (browser) {
+        await browser.close();
+      }
+    }
+  }
+
+  onEvent({ type: 'done' });
 }

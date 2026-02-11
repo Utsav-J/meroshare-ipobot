@@ -249,6 +249,14 @@ body {
   color: #d1d5db;
 }
 
+/* ── Action Cell ──────────────────────────────────────────────────────────── */
+
+.action-cell {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
 /* ── Apply Button ─────────────────────────────────────────────────────────── */
 
 .apply-btn {
@@ -262,6 +270,7 @@ body {
   font-family: inherit;
   cursor: pointer;
   transition: background 0.15s;
+  white-space: nowrap;
 }
 
 .apply-btn:hover:not(:disabled) {
@@ -269,6 +278,31 @@ body {
 }
 
 .apply-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Bulk Apply Button ───────────────────────────────────────────────────── */
+
+.bulk-apply-btn {
+  padding: 0.35rem 0.9rem;
+  border: none;
+  border-radius: 6px;
+  background: #7c3aed;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.bulk-apply-btn:hover:not(:disabled) {
+  background: #6d28d9;
+}
+
+.bulk-apply-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -296,6 +330,10 @@ body {
   max-height: 90vh;
   overflow-y: auto;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.modal-wide {
+  max-width: 680px;
 }
 
 .modal-header {
@@ -395,6 +433,186 @@ body {
 
 .apply-log-area {
   max-height: 180px;
+}
+
+/* ── Modal Account Info ──────────────────────────────────────────────────── */
+
+.modal-account-info {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  margin-bottom: 1rem;
+}
+
+.modal-account-info strong {
+  color: #e2e8f0;
+}
+
+/* ── Bulk Account Selection ──────────────────────────────────────────────── */
+
+.bulk-accounts-section {
+  margin-bottom: 1.25rem;
+}
+
+.bulk-accounts-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.bulk-accounts-header h3 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #f1f5f9;
+  margin: 0;
+}
+
+.toggle-all-btn {
+  padding: 0.25rem 0.6rem;
+  border: 1px solid #475569;
+  border-radius: 6px;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 0.75rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.toggle-all-btn:hover:not(:disabled) {
+  border-color: #3b82f6;
+  color: #e2e8f0;
+}
+
+.toggle-all-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.bulk-accounts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 0.75rem;
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+}
+
+.bulk-account-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  transition: background 0.1s;
+  font-size: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.bulk-account-item:hover {
+  background: #1e293b;
+}
+
+.bulk-account-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+}
+
+.bulk-account-left input[type='checkbox'] {
+  accent-color: #3b82f6;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.bulk-account-name {
+  font-weight: 600;
+  color: #e2e8f0;
+  white-space: nowrap;
+}
+
+.bulk-account-username {
+  color: #64748b;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.bulk-account-pin {
+  width: 60px;
+  padding: 0.3rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #475569;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 0.8rem;
+  font-family: inherit;
+  outline: none;
+  text-align: center;
+  flex-shrink: 0;
+  transition: border-color 0.15s;
+}
+
+.bulk-account-pin:focus {
+  border-color: #3b82f6;
+}
+
+.bulk-account-pin:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.bulk-account-pin::placeholder {
+  color: #475569;
+  font-size: 0.75rem;
+}
+
+.bulk-account-status {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.bulk-account-msg {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Bulk Summary Table ──────────────────────────────────────────────────── */
+
+.bulk-summary {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+
+.bulk-summary h3 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #f1f5f9;
+  margin-bottom: 0.5rem;
+}
+
+.bulk-results-table {
+  font-size: 0.85rem;
+}
+
+/* ── Yellow Badge ────────────────────────────────────────────────────────── */
+
+.badge-yellow {
+  background: #78350f;
+  color: #fbbf24;
 }
 
 /* ── Empty State ──────────────────────────────────────────────────────────── */
