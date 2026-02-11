@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
-import { loadAllCredentials, runMeroshareAutomation, type AutomationEvent } from './automation';
+import { loadAllCredentials, runMeroshareAutomation, applyForIPO, type AutomationEvent } from './automation';
 
 const app = express();
 const PORT = 3000;
@@ -72,6 +72,61 @@ app.post('/api/run', (req, res) => {
   req.on('close', () => {
     // Automation will complete on its own; we just note the disconnect
     console.log('[SSE] Client disconnected');
+  });
+});
+
+/** Apply for a specific IPO — returns SSE stream */
+app.post('/api/apply', (req, res) => {
+  if (running) {
+    res.status(409).json({ error: 'An automation is already running. Please wait.' });
+    return;
+  }
+
+  const { account, companyIndex, appliedKitta, transactionPIN } = req.body;
+  if (!account) {
+    res.status(400).json({ error: 'Missing "account" in request body' });
+    return;
+  }
+  if (companyIndex === undefined || companyIndex === null) {
+    res.status(400).json({ error: 'Missing "companyIndex" in request body' });
+    return;
+  }
+  if (!appliedKitta) {
+    res.status(400).json({ error: 'Missing "appliedKitta" in request body' });
+    return;
+  }
+  if (!transactionPIN) {
+    res.status(400).json({ error: 'Missing "transactionPIN" in request body' });
+    return;
+  }
+
+  const creds = loadAllCredentials();
+  const cred = creds[account];
+  if (!cred) {
+    res.status(404).json({ error: `Account "${account}" not found` });
+    return;
+  }
+
+  // Set up SSE
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+
+  running = true;
+
+  const sendEvent = (event: AutomationEvent) => {
+    res.write(`data: ${JSON.stringify(event)}\n\n`);
+  };
+
+  applyForIPO(account, cred, companyIndex, appliedKitta, transactionPIN, sendEvent).finally(() => {
+    running = false;
+    res.end();
+  });
+
+  req.on('close', () => {
+    console.log('[SSE] Client disconnected (apply)');
   });
 });
 

@@ -5,8 +5,9 @@ export interface Account {
 
 export type AutomationEvent =
   | { type: 'log'; message: string }
-  | { type: 'issue'; data: { name: string; subGroup: string; shareType: string; shareGroup: string } }
-  | { type: 'report'; data: { index: number; total: number; name: string; shareType: string; status: string; remarks: string } }
+  | { type: 'issue'; data: IssueRow }
+  | { type: 'report'; data: ReportRow }
+  | { type: 'apply_success'; message: string }
   | { type: 'done' }
   | { type: 'error'; message: string };
 
@@ -24,4 +25,12 @@ export interface IssueRow {
   subGroup: string;
   shareType: string;
   shareGroup: string;
+}
+
+export interface ApplyRequest {
+  account: string;
+  companyName: string;
+  companyIndex: number;
+  appliedKitta: string;
+  transactionPIN: string;
 }
