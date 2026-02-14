@@ -188,7 +188,9 @@ export default function App() {
   const openApplyModal = (index: number, name: string) => {
     setApplyTarget({ index, name });
     setAppliedKitta('');
-    setTransactionPIN('');
+    // Pre-fill TPIN from the selected account's stored TPIN if available
+    const selectedAccount = accounts.find((a) => a.name === selected);
+    setTransactionPIN(selectedAccount?.tpin || '');
     setApplyLogs([]);
     setApplySuccess(null);
     setApplyError(null);
@@ -264,7 +266,14 @@ export default function App() {
     setBulkSelectedAccounts(accounts.map((a) => a.name)); // select all by default
     setBulkKitta('');
     setBulkPIN('');
-    setBulkAccountPINs({});
+    // Pre-fill per-account TPINs from stored credentials
+    const prefilledPINs: Record<string, string> = {};
+    for (const a of accounts) {
+      if (a.tpin) {
+        prefilledPINs[a.name] = a.tpin;
+      }
+    }
+    setBulkAccountPINs(prefilledPINs);
     setBulkLogs([]);
     setBulkStatuses([]);
     setBulkError(null);
@@ -397,7 +406,7 @@ export default function App() {
           >
             {accounts.map((a) => (
               <option key={a.name} value={a.name}>
-                {a.name} ({a.username})
+                {a.name} ({a.username}) — DP: {a.dpCode}
               </option>
             ))}
           </select>
@@ -481,6 +490,9 @@ export default function App() {
               <div className="modal-company">{applyTarget.name}</div>
               <div className="modal-account-info">
                 Applying as: <strong>{selected}</strong>
+                {accounts.find((a) => a.name === selected)?.dpCode && (
+                  <span> — DP: <strong>{accounts.find((a) => a.name === selected)?.dpCode}</strong></span>
+                )}
               </div>
 
               <div className="modal-form">
@@ -572,6 +584,7 @@ export default function App() {
                           />
                           <span className="bulk-account-name">{a.name}</span>
                           <span className="bulk-account-username">({a.username})</span>
+                          <span className="bulk-account-dp">DP: {a.dpCode}</span>
                         </label>
                         <input
                           type="password"

@@ -544,6 +544,16 @@ body {
   white-space: nowrap;
 }
 
+.bulk-account-dp {
+  color: #7c3aed;
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+  padding: 0.1rem 0.4rem;
+  background: rgba(124, 58, 237, 0.12);
+  border-radius: 4px;
+}
+
 .bulk-account-pin {
   width: 60px;
   padding: 0.3rem 0.5rem;

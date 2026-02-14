@@ -5,9 +5,11 @@ import * as path from 'path';
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export interface Credential {
+  DP_CODE: string;
   username: string;
   password: string;
   CRN: string;
+  TPIN?: string;
 }
 
 interface DPInfo {
@@ -36,7 +38,6 @@ export type AutomationEvent =
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const BASE_URL = 'https://meroshare.cdsc.com.np/';
-const DP_CODE = '10700'; // LAXMI SUNRISE CAPITAL LIMITED
 
 // ── Credential Loader ────────────────────────────────────────────────────────
 
@@ -102,13 +103,17 @@ async function loginToMeroshare(page: Page, cred: Credential, dpCode: string, em
   await page.waitForURL('**/login', { timeout: 15000 });
   emit({ type: 'log', message: 'On login page' });
 
-  // Resolve the correct DP clientId from the API
+  // Resolve the correct DP from the API using the account's DP code
   const dpList = await captureDPList(page);
+  emit({ type: 'log', message: `Captured ${dpList.length} DPs from API. Looking for code ${dpCode}...` });
+
   const targetDP = dpList.find((dp) => dp.code === dpCode);
   if (!targetDP) {
-    throw new Error(`DP with code ${dpCode} not found. Available: ${dpList.length} DPs`);
+    // Log available codes to aid debugging
+    const availableCodes = dpList.slice(0, 10).map((dp) => `${dp.code} (${dp.name})`).join(', ');
+    throw new Error(`DP with code ${dpCode} not found. Available (first 10): ${availableCodes}...`);
   }
-  emit({ type: 'log', message: `DP resolved: ${targetDP.name} (id=${targetDP.id})` });
+  emit({ type: 'log', message: `DP resolved: ${targetDP.name} (code=${targetDP.code}, id=${targetDP.id})` });
 
   // Intercept the login POST and fix clientId
   await page.route('**/api/meroShare/auth/**', async (route) => {
@@ -124,9 +129,10 @@ async function loginToMeroshare(page: Page, cred: Credential, dpCode: string, em
     }
   });
 
-  emit({ type: 'log', message: `Logging in as "${cred.username}" ...` });
+  emit({ type: 'log', message: `Logging in as "${cred.username}" with DP "${targetDP.name}" ...` });
 
-  await selectDPInDropdown(page, dpCode);
+  // Select the DP in the dropdown using the resolved name (not the code)
+  await selectDPInDropdown(page, targetDP.name);
 
   const usernameInput = page.locator('input[type="text"]').first();
   await typeIntoField(usernameInput, cred.username);
@@ -174,7 +180,7 @@ export async function runMeroshareAutomation(
     const page = await context.newPage();
 
     // ── Login ────────────────────────────────────────────────────────────
-    await loginToMeroshare(page, cred, DP_CODE, onEvent);
+    await loginToMeroshare(page, cred, cred.DP_CODE, onEvent);
 
     // ── Navigate to My ASBA ──────────────────────────────────────────────
     const asbaLink = page.locator('a[href="#/asba"]');
@@ -315,7 +321,7 @@ export async function scanForIssues(
     const context = await browser.newContext();
     const page = await context.newPage();
 
-    await loginToMeroshare(page, cred, DP_CODE, onEvent);
+    await loginToMeroshare(page, cred, cred.DP_CODE, onEvent);
 
     // Navigate to My ASBA
     const asbaLink = page.locator('a[href="#/asba"]');
@@ -407,7 +413,7 @@ export async function applyForIPO(
     const page = await context.newPage();
 
     // ── Login ────────────────────────────────────────────────────────────
-    await loginToMeroshare(page, cred, DP_CODE, onEvent);
+    await loginToMeroshare(page, cred, cred.DP_CODE, onEvent);
 
     // ── Navigate to My ASBA ──────────────────────────────────────────────
     const asbaLink = page.locator('a[href="#/asba"]');
@@ -572,7 +578,7 @@ export async function bulkApplyForIPO(
 
       // ── Login ──────────────────────────────────────────────────────────
       try {
-        await loginToMeroshare(page, cred, DP_CODE, onEvent);
+        await loginToMeroshare(page, cred, cred.DP_CODE, onEvent);
       } catch (loginErr: any) {
         onEvent({
           type: 'account_status',

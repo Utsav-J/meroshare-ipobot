@@ -22,6 +22,8 @@ app.get('/api/accounts', (_req, res) => {
     const accounts = Object.keys(creds).map((name) => ({
       name,
       username: creds[name].username,
+      dpCode: creds[name].DP_CODE,
+      tpin: creds[name].TPIN || '',
     }));
     res.json(accounts);
   } catch (err: any) {

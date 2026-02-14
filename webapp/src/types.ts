@@ -1,6 +1,8 @@
 export interface Account {
   name: string;
   username: string;
+  dpCode: string;
+  tpin: string;
 }
 
 export type AutomationEvent =
