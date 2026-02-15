@@ -28,6 +28,12 @@ body {
   margin-bottom: 2rem;
 }
 
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .header h1 {
   font-size: 1.75rem;
   font-weight: 700;
@@ -38,6 +44,32 @@ body {
   color: #94a3b8;
   font-size: 0.9rem;
   margin-top: 0.25rem;
+}
+
+/* ── Help Button ─────────────────────────────────────────────────────────── */
+
+.help-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1.5px solid #475569;
+  background: #1e293b;
+  color: #94a3b8;
+  font-size: 1rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.help-btn:hover {
+  border-color: #3b82f6;
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.1);
 }
 
 /* ── Controls ─────────────────────────────────────────────────────────────── */
@@ -633,6 +665,528 @@ body {
   padding: 2rem;
 }
 
+/* ── Credential Manager ──────────────────────────────────────────────────── */
+
+.cred-manager {
+  margin-bottom: 1.5rem;
+  background: #1e293b;
+  border-radius: 12px;
+  border: 1px solid #334155;
+  overflow: hidden;
+}
+
+.cred-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+}
+
+.cred-header:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.cred-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.cred-header-left h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #f1f5f9;
+  margin: 0;
+}
+
+.cred-count {
+  font-size: 0.75rem;
+  color: #64748b;
+  background: #0f172a;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  font-weight: 500;
+}
+
+.cred-collapse-btn {
+  background: none;
+  border: none;
+  color: #64748b;
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+  line-height: 1;
+}
+
+.cred-content {
+  padding: 0 1.25rem 1.25rem;
+}
+
+/* ── Credential List ─────────────────────────────────────────────────────── */
+
+.cred-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.cred-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 10px;
+  transition: border-color 0.15s;
+}
+
+.cred-card:hover {
+  border-color: #334155;
+}
+
+.cred-card-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.cred-card-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #e2e8f0;
+  margin-bottom: 0.25rem;
+}
+
+.cred-card-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+}
+
+.cred-detail {
+  font-size: 0.78rem;
+  color: #94a3b8;
+}
+
+.cred-detail-label {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.cred-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.cred-edit-btn {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid #475569;
+  border-radius: 6px;
+  background: transparent;
+  color: #93c5fd;
+  font-size: 0.78rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.cred-edit-btn:hover {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: #3b82f6;
+}
+
+.cred-delete-btn {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid #475569;
+  border-radius: 6px;
+  background: transparent;
+  color: #fca5a5;
+  font-size: 0.78rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.cred-delete-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: #ef4444;
+}
+
+.cred-delete-confirm {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  color: #fbbf24;
+}
+
+.cred-delete-yes {
+  padding: 0.2rem 0.5rem;
+  border: none;
+  border-radius: 4px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 0.72rem;
+  font-family: inherit;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.cred-delete-yes:hover {
+  background: #b91c1c;
+}
+
+.cred-delete-no {
+  padding: 0.2rem 0.5rem;
+  border: 1px solid #475569;
+  border-radius: 4px;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 0.72rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.cred-delete-no:hover {
+  border-color: #64748b;
+  color: #e2e8f0;
+}
+
+/* ── Credential Empty State ──────────────────────────────────────────────── */
+
+.cred-empty {
+  text-align: center;
+  padding: 1.5rem 1rem;
+  color: #64748b;
+  font-size: 0.88rem;
+  background: #0f172a;
+  border-radius: 10px;
+  border: 1px dashed #334155;
+  margin-bottom: 1rem;
+}
+
+/* ── JSON Drop Zone ──────────────────────────────────────────────────────── */
+
+.cred-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 1rem 1.25rem;
+  margin-bottom: 0.75rem;
+  background: #0f172a;
+  border: 1.5px dashed #334155;
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.cred-dropzone:hover {
+  border-color: #475569;
+  background: rgba(59, 130, 246, 0.04);
+}
+
+.cred-dropzone-active {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.cred-dropzone-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.cred-dropzone-text {
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+.cred-dropzone-text strong {
+  color: #e2e8f0;
+}
+
+.cred-dropzone-link {
+  color: #3b82f6;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.cred-dropzone-hint {
+  font-size: 0.72rem;
+  color: #475569;
+}
+
+.cred-dropzone-hint code {
+  font-family: 'Consolas', 'Fira Code', monospace;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  font-size: 0.68rem;
+}
+
+/* ── Import Message ──────────────────────────────────────────────────────── */
+
+.cred-import-msg {
+  padding: 0.6rem 0.9rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  margin-bottom: 0.75rem;
+  white-space: pre-line;
+}
+
+.cred-import-success {
+  background: #064e3b;
+  border: 1px solid #065f46;
+  color: #6ee7b7;
+}
+
+.cred-import-error {
+  background: #7f1d1d;
+  border: 1px solid #991b1b;
+  color: #fca5a5;
+}
+
+/* ── Add Button ──────────────────────────────────────────────────────────── */
+
+.cred-add-btn {
+  width: 100%;
+  padding: 0.65rem 1rem;
+  border: 1px dashed #475569;
+  border-radius: 10px;
+  background: transparent;
+  color: #3b82f6;
+  font-size: 0.88rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.cred-add-btn:hover {
+  background: rgba(59, 130, 246, 0.06);
+  border-color: #3b82f6;
+}
+
+/* ── Credential Form ─────────────────────────────────────────────────────── */
+
+.cred-form {
+  padding: 1.25rem;
+  background: #0f172a;
+  border: 1px solid #1e3a5f;
+  border-radius: 10px;
+}
+
+.cred-form h3 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #93c5fd;
+  margin-bottom: 1rem;
+}
+
+.cred-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.9rem;
+}
+
+.cred-field-full {
+  grid-column: 1 / -1;
+}
+
+.cred-form-grid .control-group input,
+.cred-form-grid .control-group select {
+  width: 100%;
+}
+
+.cred-form-grid .control-group input[type='number'] {
+  width: 100%;
+}
+
+/* ── Password toggle ─────────────────────────────────────────────────────── */
+
+.cred-password-wrap {
+  display: flex;
+  gap: 0;
+  position: relative;
+}
+
+.cred-password-wrap input {
+  flex: 1;
+  border-top-right-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+}
+
+.cred-toggle-pass {
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #475569;
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+  background: #1e293b;
+  color: #94a3b8;
+  font-size: 0.72rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.cred-toggle-pass:hover {
+  background: #334155;
+  color: #e2e8f0;
+}
+
+/* ── Field Errors ────────────────────────────────────────────────────────── */
+
+.has-error input,
+.has-error select {
+  border-color: #ef4444 !important;
+}
+
+.field-error {
+  font-size: 0.72rem;
+  color: #fca5a5;
+  margin-top: 0.15rem;
+}
+
+/* ── Form Actions ────────────────────────────────────────────────────────── */
+
+.cred-form-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.cred-save-btn {
+  flex: 1;
+}
+
+.cred-cancel-btn {
+  padding: 0.6rem 1.25rem;
+  border: 1px solid #475569;
+  border-radius: 8px;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 0.9rem;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.cred-cancel-btn:hover {
+  border-color: #64748b;
+  color: #e2e8f0;
+}
+
+/* ── Issue Row — No Apply ─────────────────────────────────────────────────── */
+
+.issue-row-no-apply {
+  opacity: 0.65;
+}
+
+.issue-no-apply-hint {
+  font-size: 0.78rem;
+  color: #64748b;
+  font-style: italic;
+}
+
+/* ── Help Modal ──────────────────────────────────────────────────────────── */
+
+.help-modal {
+  max-width: 640px;
+}
+
+.help-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.help-section h3 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #93c5fd;
+  margin-bottom: 0.5rem;
+}
+
+.help-section p {
+  font-size: 0.85rem;
+  color: #cbd5e1;
+  line-height: 1.65;
+  margin-bottom: 0.35rem;
+}
+
+.help-section code {
+  font-family: 'Consolas', 'Fira Code', monospace;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  color: #fbbf24;
+}
+
+.help-note {
+  padding: 0.75rem 1rem;
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  margin: 0.5rem 0;
+  font-size: 0.82rem;
+  color: #94a3b8;
+}
+
+.help-code-block {
+  display: block;
+  margin-top: 0.5rem;
+  padding: 0.65rem 0.75rem !important;
+  background: #020617 !important;
+  border-radius: 6px !important;
+  font-size: 0.75rem !important;
+  color: #a5f3fc !important;
+  white-space: pre;
+  overflow-x: auto;
+  line-height: 1.5;
+}
+
+.help-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.35rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.help-list li {
+  font-size: 0.85rem;
+  color: #cbd5e1;
+  padding-left: 1.1rem;
+  position: relative;
+  line-height: 1.55;
+}
+
+.help-list li::before {
+  content: '•';
+  position: absolute;
+  left: 0;
+  color: #475569;
+  font-weight: bold;
+}
+
+.help-list li .badge {
+  vertical-align: middle;
+  margin-right: 0.3rem;
+}
+
 /* ── Scrollbar ────────────────────────────────────────────────────────────── */
 
 .log-area::-webkit-scrollbar {
@@ -646,4 +1200,21 @@ body {
 .log-area::-webkit-scrollbar-thumb {
   background: #334155;
   border-radius: 3px;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 600px) {
+  .cred-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cred-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .cred-card-actions {
+    align-self: flex-end;
+  }
 }

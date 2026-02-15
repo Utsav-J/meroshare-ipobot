@@ -5,6 +5,17 @@ export interface Account {
   tpin: string;
 }
 
+/** Credential as stored in localStorage and sent to server */
+export interface StoredCredential {
+  DP_CODE: string;
+  username: string;
+  password: string;
+  CRN: string;
+  TPIN?: string;
+}
+
+export type CredentialsMap = Record<string, StoredCredential>;
+
 export type AutomationEvent =
   | { type: 'log'; message: string }
   | { type: 'issue'; data: IssueRow }
@@ -28,6 +39,7 @@ export interface IssueRow {
   subGroup: string;
   shareType: string;
   shareGroup: string;
+  hasApplyButton: boolean;
 }
 
 export interface ApplyRequest {

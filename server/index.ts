@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
-import { loadAllCredentials, runMeroshareAutomation, scanForIssues, applyForIPO, bulkApplyForIPO, type AutomationEvent } from './automation';
+import { loadAllCredentials, setInMemoryCredentials, runMeroshareAutomation, scanForIssues, applyForIPO, bulkApplyForIPO, type AutomationEvent } from './automation';
 
 const app = express();
 const PORT = 3000;
@@ -14,6 +14,22 @@ app.use(express.json());
 let running = false;
 
 // ── API Routes ───────────────────────────────────────────────────────────────
+
+/** Accept credentials from the browser and store in memory */
+app.post('/api/credentials', (req, res) => {
+  try {
+    const creds = req.body;
+    if (!creds || typeof creds !== 'object') {
+      res.status(400).json({ error: 'Invalid credentials payload' });
+      return;
+    }
+    setInMemoryCredentials(creds);
+    console.log(`[Credentials] Received ${Object.keys(creds).length} account(s) from browser`);
+    res.json({ ok: true, count: Object.keys(creds).length });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 /** List account names (no passwords exposed) */
 app.get('/api/accounts', (_req, res) => {

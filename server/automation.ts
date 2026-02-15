@@ -28,7 +28,7 @@ export interface AccountStatus {
 
 export type AutomationEvent =
   | { type: 'log'; message: string }
-  | { type: 'issue'; data: { name: string; subGroup: string; shareType: string; shareGroup: string } }
+  | { type: 'issue'; data: { name: string; subGroup: string; shareType: string; shareGroup: string; hasApplyButton: boolean } }
   | { type: 'report'; data: { index: number; total: number; name: string; shareType: string; status: string; remarks: string } }
   | { type: 'apply_success'; message: string }
   | { type: 'account_status'; data: AccountStatus }
@@ -39,9 +39,22 @@ export type AutomationEvent =
 
 const BASE_URL = 'https://meroshare.cdsc.com.np/';
 
+// ── In-memory Credential Store (synced from browser) ─────────────────────────
+
+let inMemoryCredentials: Record<string, Credential> | null = null;
+
+export function setInMemoryCredentials(creds: Record<string, Credential>): void {
+  inMemoryCredentials = creds;
+}
+
 // ── Credential Loader ────────────────────────────────────────────────────────
 
 export function loadAllCredentials(): Record<string, Credential> {
+  // Prefer credentials synced from browser
+  if (inMemoryCredentials && Object.keys(inMemoryCredentials).length > 0) {
+    return inMemoryCredentials;
+  }
+  // Fallback to file-based credentials
   const allCredsPath = path.resolve(__dirname, '..', 'all_credentials.json');
   if (fs.existsSync(allCredsPath)) {
     return JSON.parse(fs.readFileSync(allCredsPath, 'utf-8'));
@@ -207,7 +220,10 @@ export async function runMeroshareAutomation(
         const shareType = (await shareTypeEl.textContent().catch(() => ''))?.trim() || 'N/A';
         const shareGroupEl = item.locator('.isin');
         const shareGroup = (await shareGroupEl.textContent().catch(() => ''))?.trim() || 'N/A';
-        onEvent({ type: 'issue', data: { name: companyName, subGroup, shareType, shareGroup } });
+        // Check if the issue has a clickable Apply button
+        const applyBtn = item.locator('button').filter({ hasText: /apply/i }).first();
+        const hasApplyButton = (await applyBtn.count()) > 0;
+        onEvent({ type: 'issue', data: { name: companyName, subGroup, shareType, shareGroup, hasApplyButton } });
       }
     } else {
       onEvent({ type: 'log', message: 'No open issues — switching to Application Report tab' });
@@ -347,7 +363,10 @@ export async function scanForIssues(
         const shareType = (await shareTypeEl.textContent().catch(() => ''))?.trim() || 'N/A';
         const shareGroupEl = item.locator('.isin');
         const shareGroup = (await shareGroupEl.textContent().catch(() => ''))?.trim() || 'N/A';
-        onEvent({ type: 'issue', data: { name: companyName, subGroup, shareType, shareGroup } });
+        // Check if the issue has a clickable Apply button
+        const applyBtn = item.locator('button').filter({ hasText: /apply/i }).first();
+        const hasApplyButton = (await applyBtn.count()) > 0;
+        onEvent({ type: 'issue', data: { name: companyName, subGroup, shareType, shareGroup, hasApplyButton } });
       }
     } else {
       onEvent({ type: 'log', message: 'No open issues found' });

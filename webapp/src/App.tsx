@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
-import type { Account, AutomationEvent, ReportRow, IssueRow, AccountStatus } from './types';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import type { Account, AutomationEvent, ReportRow, IssueRow, AccountStatus, CredentialsMap } from './types';
+import CredentialManager, { loadCredentials } from './CredentialManager';
 
 function StatusBadge({ status }: { status: string }) {
   const s = status.toLowerCase();
@@ -77,6 +78,7 @@ export default function App() {
   const [issues, setIssues] = useState<IssueRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
 
   // ── Single-apply modal state ─────────────────────────────────────────────
@@ -104,15 +106,55 @@ export default function App() {
 
   const anyRunning = running || applyRunning || bulkRunning;
 
-  // Fetch accounts on mount
+  // ── Sync credentials from localStorage to server ──────────────────────────
+
+  const syncCredentialsToServer = useCallback(async (creds: CredentialsMap) => {
+    try {
+      await fetch('/api/credentials', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(creds),
+      });
+    } catch {
+      // Server might be down, credentials are still in localStorage
+    }
+
+    // Derive accounts list from the credentials map
+    const accs: Account[] = Object.keys(creds).map((name) => ({
+      name,
+      username: creds[name].username,
+      dpCode: creds[name].DP_CODE,
+      tpin: creds[name].TPIN || '',
+    }));
+    setAccounts(accs);
+    if (accs.length > 0 && !accs.find((a) => a.name === selected)) {
+      setSelected(accs[0].name);
+    }
+  }, [selected]);
+
+  const handleCredentialsChange = useCallback((creds: CredentialsMap) => {
+    syncCredentialsToServer(creds);
+  }, [syncCredentialsToServer]);
+
+  // On mount: sync saved browser credentials to server, falling back to server file
   useEffect(() => {
-    fetch('/api/accounts')
-      .then((r) => r.json())
-      .then((data: Account[]) => {
-        setAccounts(data);
-        if (data.length > 0) setSelected(data[0].name);
-      })
-      .catch((e) => setError(`Failed to load accounts: ${e.message}`));
+    const browserCreds = loadCredentials();
+    const hasBrowserCreds = Object.keys(browserCreds).length > 0;
+
+    if (hasBrowserCreds) {
+      // Browser has saved credentials — sync them to server
+      syncCredentialsToServer(browserCreds);
+    } else {
+      // No browser credentials — fall back to server-side file
+      fetch('/api/accounts')
+        .then((r) => r.json())
+        .then((data: Account[]) => {
+          setAccounts(data);
+          if (data.length > 0) setSelected(data[0].name);
+        })
+        .catch((e) => setError(`Failed to load accounts: ${e.message}`));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Auto-scroll logs
@@ -391,9 +433,92 @@ export default function App() {
   return (
     <div className="app">
       <header className="header">
-        <h1>Meroshare Automation</h1>
+        <div className="header-top">
+          <h1>Meroshare Automation</h1>
+          <button className="help-btn" onClick={() => setShowHelp(true)} title="How to use this app">
+            ?
+          </button>
+        </div>
         <p className="subtitle">Scan for open IPOs and apply across multiple accounts</p>
       </header>
+
+      {/* Help Modal */}
+      {showHelp && (
+        <div className="modal-overlay" onClick={() => setShowHelp(false)}>
+          <div className="modal modal-wide help-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>How to Use</h2>
+              <button className="modal-close" onClick={() => setShowHelp(false)}>&times;</button>
+            </div>
+            <div className="modal-body help-body">
+              <div className="help-section">
+                <h3>1. Add Your Accounts</h3>
+                <p>
+                  Click <strong>"Manage Accounts"</strong> at the top to expand the accounts panel. You can add accounts
+                  one-by-one using the <strong>"+ Add Account"</strong> button, or quickly import multiple accounts by
+                  dropping a <code>.json</code> file in the drop zone.
+                </p>
+                <div className="help-note">
+                  The JSON file should follow this format:
+                  <code className="help-code-block">{`{
+  "Dad": { "DP_CODE": "10700", "username": "00138869", "password": "***", "CRN": "142S4166" },
+  "Mom": { "DP_CODE": "10700", "username": "00138873", "password": "***", "CRN": "13408572" }
+}`}</code>
+                </div>
+                <p>
+                  Your credentials are stored in your <strong>browser's local storage</strong> and are sent to the server
+                  only when running automation. They are never uploaded or shared externally.
+                </p>
+              </div>
+
+              <div className="help-section">
+                <h3>2. Scan for Open IPOs</h3>
+                <p>
+                  Select any of your accounts from the dropdown and click <strong>"Scan for Applications"</strong>.
+                  The system will log into Meroshare with that account and fetch all currently open IPO issues.
+                </p>
+                <p>
+                  Each issue will show a <strong>status badge</strong>:
+                </p>
+                <ul className="help-list">
+                  <li><span className="badge badge-green">Open</span> — You can apply for this IPO</li>
+                  <li><span className="badge badge-yellow">Already Applied / Closed</span> — The apply button is not available on Meroshare (already applied, window closed, etc.)</li>
+                </ul>
+              </div>
+
+              <div className="help-section">
+                <h3>3. Apply for a Single Account</h3>
+                <p>
+                  Click <strong>"Apply"</strong> next to an open issue. Enter the number of kitta and your
+                  <strong> Transaction PIN (TPIN)</strong>, then submit. The system will fill the Meroshare form
+                  automatically for the selected account.
+                </p>
+              </div>
+
+              <div className="help-section">
+                <h3>4. Apply in Bulk</h3>
+                <p>
+                  Click <strong>"Apply in Bulk"</strong> to apply for the same IPO across multiple accounts at once.
+                  Select which accounts to include, enter kitta and TPIN for each (or a default TPIN), and submit.
+                  The system will process each account sequentially and show live status updates.
+                </p>
+              </div>
+
+              <div className="help-section">
+                <h3>Tips</h3>
+                <ul className="help-list">
+                  <li>Only one automation can run at a time — wait for the current one to finish before starting another.</li>
+                  <li>The TPIN is <strong>never saved</strong> — you'll enter it fresh each time you apply, for security.</li>
+                  <li>You can scan from any account — the open IPO list is the same across accounts.</li>
+                  <li>The server needs to be running locally (<code>npm run server</code>) for the automation to work.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <CredentialManager onCredentialsChange={handleCredentialsChange} />
 
       <div className="controls">
         <div className="control-group">
@@ -443,32 +568,46 @@ export default function App() {
                 <th>Sub Group</th>
                 <th>Type</th>
                 <th>Share Group</th>
+                <th>Status</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {issues.map((iss, i) => (
-                <tr key={i}>
+                <tr key={i} className={!iss.hasApplyButton ? 'issue-row-no-apply' : ''}>
                   <td>{i + 1}</td>
                   <td>{iss.name}</td>
                   <td>{iss.subGroup}</td>
                   <td><span className="badge badge-blue">{iss.shareType}</span></td>
                   <td>{iss.shareGroup}</td>
+                  <td>
+                    {iss.hasApplyButton ? (
+                      <span className="badge badge-green">Open</span>
+                    ) : (
+                      <span className="badge badge-yellow" title="This issue is listed but has no Apply button on Meroshare. You may have already applied, or the application window may have closed.">Already Applied / Closed</span>
+                    )}
+                  </td>
                   <td className="action-cell">
-                    <button
-                      className="apply-btn"
-                      onClick={() => openApplyModal(i, iss.name)}
-                      disabled={anyRunning}
-                    >
-                      Apply
-                    </button>
-                    <button
-                      className="bulk-apply-btn"
-                      onClick={() => openBulkModal(iss.name)}
-                      disabled={anyRunning}
-                    >
-                      Apply in Bulk
-                    </button>
+                    {iss.hasApplyButton ? (
+                      <>
+                        <button
+                          className="apply-btn"
+                          onClick={() => openApplyModal(i, iss.name)}
+                          disabled={anyRunning}
+                        >
+                          Apply
+                        </button>
+                        <button
+                          className="bulk-apply-btn"
+                          onClick={() => openBulkModal(iss.name)}
+                          disabled={anyRunning}
+                        >
+                          Apply in Bulk
+                        </button>
+                      </>
+                    ) : (
+                      <span className="issue-no-apply-hint">No action available</span>
+                    )}
                   </td>
                 </tr>
               ))}
