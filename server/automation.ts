@@ -39,6 +39,11 @@ export type AutomationEvent =
 
 const BASE_URL = 'https://meroshare.cdsc.com.np/';
 
+const BROWSER_LAUNCH_OPTIONS = {
+  headless: true as const,
+  args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
+};
+
 // ── In-memory Credential Store (synced from browser) ─────────────────────────
 
 let inMemoryCredentials: Record<string, Credential> | null = null;
@@ -188,7 +193,7 @@ export async function runMeroshareAutomation(
   try {
     onEvent({ type: 'log', message: `Starting automation for "${accountName}" ...` });
 
-    browser = await chromium.launch({ headless: true });
+    browser = await chromium.launch(BROWSER_LAUNCH_OPTIONS);
     const context = await browser.newContext();
     const page = await context.newPage();
 
@@ -333,7 +338,7 @@ export async function scanForIssues(
   try {
     onEvent({ type: 'log', message: `Scanning for open issues using "${accountName}" ...` });
 
-    browser = await chromium.launch({ headless: true });
+    browser = await chromium.launch(BROWSER_LAUNCH_OPTIONS);
     const context = await browser.newContext();
     const page = await context.newPage();
 
@@ -427,7 +432,7 @@ export async function applyForIPO(
   try {
     onEvent({ type: 'log', message: `Starting IPO application for "${accountName}" ...` });
 
-    browser = await chromium.launch({ headless: true });
+    browser = await chromium.launch(BROWSER_LAUNCH_OPTIONS);
     const context = await browser.newContext();
     const page = await context.newPage();
 
@@ -581,7 +586,43 @@ export async function bulkApplyForIPO(
 ): Promise<void> {
   onEvent({ type: 'log', message: `Bulk apply starting for "${targetCompanyName}" across ${accountEntries.length} account(s)` });
 
-  for (const entry of accountEntries) {
+  // Warn about accounts that share the same DP + username (same Meroshare login)
+  const loginKeyMap = new Map<string, string[]>();
+  for (const { name, cred } of accountEntries) {
+    const key = `${cred.DP_CODE}|${cred.username}`;
+    if (!loginKeyMap.has(key)) loginKeyMap.set(key, []);
+    loginKeyMap.get(key)!.push(name);
+  }
+  for (const [key, names] of loginKeyMap) {
+    if (names.length > 1) {
+      const [dp, user] = key.split('|');
+      onEvent({
+        type: 'log',
+        message: `⚠️ WARNING: Accounts [${names.join(', ')}] share the same DP (${dp}) and DMAT username (${user}). They log into the SAME Meroshare account — only the first will be able to apply. Please verify the credentials.`,
+      });
+      for (const n of names.slice(1)) {
+        onEvent({
+          type: 'account_status',
+          data: {
+            account: n,
+            status: 'error',
+            message: `Duplicate login — same DP (${dp}) and DMAT (${user}) as "${names[0]}". Update the username/DP_CODE for this account.`,
+          },
+        });
+      }
+    }
+  }
+
+  // Filter out duplicate-login accounts (keep only the first of each group)
+  const seenLogins = new Set<string>();
+  const deduped = accountEntries.filter(({ name, cred }) => {
+    const key = `${cred.DP_CODE}|${cred.username}`;
+    if (seenLogins.has(key)) return false;
+    seenLogins.add(key);
+    return true;
+  });
+
+  for (const entry of deduped) {
     const { name: accountName, cred } = entry;
     let browser: Browser | null = null;
 
@@ -591,7 +632,7 @@ export async function bulkApplyForIPO(
     });
 
     try {
-      browser = await chromium.launch({ headless: true });
+      browser = await chromium.launch(BROWSER_LAUNCH_OPTIONS);
       const context = await browser.newContext();
       const page = await context.newPage();
 

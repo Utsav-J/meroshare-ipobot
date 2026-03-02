@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "server": "tsx watch server/index.ts",
+    "start": "tsx server/index.ts",
     "webapp": "cd webapp && npm run dev",
     "dev": "concurrently \"npm run server\" \"npm run webapp\"",
     "build:webapp": "cd webapp && npm run build",

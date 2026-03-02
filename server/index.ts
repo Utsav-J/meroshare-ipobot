@@ -1,13 +1,56 @@
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
+import crypto from 'crypto';
+import dotenv from 'dotenv';
 import { loadAllCredentials, setInMemoryCredentials, runMeroshareAutomation, scanForIssues, applyForIPO, bulkApplyForIPO, type AutomationEvent } from './automation';
 
+dotenv.config();
+
 const app = express();
-const PORT = 3000;
+const PORT = parseInt(process.env.PORT || '3000', 10);
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
+
+// ── Auth ─────────────────────────────────────────────────────────────────────
+
+const AUTH_PASSWORD = process.env.AUTH_PASSWORD || '';
+const validTokens = new Set<string>();
+
+app.post('/api/auth/login', (req, res) => {
+  if (!AUTH_PASSWORD) {
+    res.json({ ok: true, token: 'dev' });
+    return;
+  }
+  if (req.body.password !== AUTH_PASSWORD) {
+    res.status(401).json({ error: 'Wrong password' });
+    return;
+  }
+  const token = crypto.randomBytes(32).toString('hex');
+  validTokens.add(token);
+  res.json({ ok: true, token });
+});
+
+app.get('/api/auth/check', (req, res) => {
+  if (!AUTH_PASSWORD) {
+    res.json({ authenticated: true });
+    return;
+  }
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  res.json({ authenticated: !!token && validTokens.has(token) });
+});
+
+app.use('/api', (req, res, next) => {
+  if (req.path.startsWith('/auth/') || req.path === '/health') return next();
+  if (!AUTH_PASSWORD) return next();
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  if (!token || !validTokens.has(token)) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  next();
+});
 
 // ── State ────────────────────────────────────────────────────────────────────
 
@@ -255,6 +298,11 @@ app.get('/api/status', (_req, res) => {
   res.json({ running });
 });
 
+/** Health check (no auth required) */
+app.get('/api/health', (_req, res) => {
+  res.json({ ok: true });
+});
+
 // ── Serve static webapp build (production) ───────────────────────────────────
 
 const webappDist = path.resolve(__dirname, '..', 'webapp', 'dist');
@@ -265,6 +313,6 @@ app.get('*', (_req, res) => {
 
 // ── Start ────────────────────────────────────────────────────────────────────
 
-app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on port ${PORT}`);
 });

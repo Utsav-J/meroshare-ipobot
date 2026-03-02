@@ -2,6 +2,98 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Account, AutomationEvent, ReportRow, IssueRow, AccountStatus, CredentialsMap } from './types';
 import CredentialManager, { loadCredentials } from './CredentialManager';
 
+// ── Auth helpers ──────────────────────────────────────────────────────────────
+
+const AUTH_TOKEN_KEY = 'meroshare_auth_token';
+
+function getAuthToken(): string | null {
+  return localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+function setAuthToken(token: string) {
+  localStorage.setItem(AUTH_TOKEN_KEY, token);
+}
+
+function clearAuthToken() {
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+}
+
+function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  const token = getAuthToken();
+  const headers: Record<string, string> = { ...extra };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
+}
+
+function authFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(url, {
+    ...init,
+    headers: {
+      ...authHeaders(),
+      ...(init.headers as Record<string, string> || {}),
+    },
+  });
+}
+
+// ── Login screen ──────────────────────────────────────────────────────────────
+
+function LoginScreen({ onLogin }: { onLogin: () => void }) {
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Login failed');
+        return;
+      }
+      setAuthToken(data.token);
+      onLogin();
+    } catch (err: any) {
+      setError(err.message || 'Network error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="app" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+      <form onSubmit={handleSubmit} style={{ width: '100%', maxWidth: 360, padding: '2rem' }}>
+        <h1 style={{ textAlign: 'center', marginBottom: '0.5rem' }}>Meroshare Automation</h1>
+        <p className="subtitle" style={{ textAlign: 'center', marginBottom: '1.5rem' }}>Enter password to continue</p>
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Password"
+          autoFocus
+          style={{ width: '100%', padding: '0.75rem', marginBottom: '1rem', borderRadius: 6, border: '1px solid #444', background: '#1a1a2e', color: '#e0e0e0', fontSize: '1rem' }}
+        />
+        {error && <p style={{ color: '#e53e3e', marginBottom: '0.75rem', textAlign: 'center' }}>{error}</p>}
+        <button
+          type="submit"
+          disabled={loading || !password}
+          style={{ width: '100%', padding: '0.75rem', borderRadius: 6, background: '#4f8cff', color: '#fff', fontWeight: 600, fontSize: '1rem', border: 'none', cursor: 'pointer', opacity: loading ? 0.6 : 1 }}
+        >
+          {loading ? 'Logging in...' : 'Login'}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+// ── Components ────────────────────────────────────────────────────────────────
+
 function StatusBadge({ status }: { status: string }) {
   const s = status.toLowerCase();
   let cls = 'badge badge-gray';
@@ -69,7 +161,25 @@ function readSSEStream(
   })();
 }
 
+// ── Auth wrapper ──────────────────────────────────────────────────────────────
+
 export default function App() {
+  const [authChecked, setAuthChecked] = useState(false);
+  const [authenticated, setAuthenticated] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/auth/check', { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((d) => { setAuthenticated(d.authenticated); setAuthChecked(true); })
+      .catch(() => { setAuthenticated(false); setAuthChecked(true); });
+  }, []);
+
+  if (!authChecked) return null;
+  if (!authenticated) return <LoginScreen onLogin={() => setAuthenticated(true)} />;
+  return <MainApp onLogout={() => { clearAuthToken(); setAuthenticated(false); }} />;
+}
+
+function MainApp({ onLogout }: { onLogout: () => void }) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selected, setSelected] = useState<string>('');
   const [running, setRunning] = useState(false);
@@ -110,7 +220,7 @@ export default function App() {
 
   const syncCredentialsToServer = useCallback(async (creds: CredentialsMap) => {
     try {
-      await fetch('/api/credentials', {
+      await authFetch('/api/credentials', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(creds),
@@ -146,7 +256,7 @@ export default function App() {
       syncCredentialsToServer(browserCreds);
     } else {
       // No browser credentials — fall back to server-side file
-      fetch('/api/accounts')
+      authFetch('/api/accounts')
         .then((r) => r.json())
         .then((data: Account[]) => {
           setAccounts(data);
@@ -184,7 +294,7 @@ export default function App() {
     setApplyTarget(null);
     setBulkTarget(null);
 
-    fetch('/api/scan', {
+    authFetch('/api/scan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ account: selected }),
@@ -252,7 +362,7 @@ export default function App() {
     setApplySuccess(null);
     setApplyError(null);
 
-    fetch('/api/apply', {
+    authFetch('/api/apply', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -366,7 +476,7 @@ export default function App() {
       }
     }
 
-    fetch('/api/bulk-apply', {
+    authFetch('/api/bulk-apply', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -435,9 +545,14 @@ export default function App() {
       <header className="header">
         <div className="header-top">
           <h1>Meroshare Automation</h1>
-          <button className="help-btn" onClick={() => setShowHelp(true)} title="How to use this app">
-            ?
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="help-btn" onClick={() => setShowHelp(true)} title="How to use this app">
+              ?
+            </button>
+            <button className="help-btn" onClick={onLogout} title="Logout" style={{ fontSize: '0.85rem' }}>
+              Logout
+            </button>
+          </div>
         </div>
         <p className="subtitle">Scan for open IPOs and apply across multiple accounts</p>
       </header>

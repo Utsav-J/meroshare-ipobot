@@ -69,6 +69,7 @@ function validateForm(
   cred: StoredCredential,
   existingNames: string[],
   editingName: string | null,
+  allCredentials?: CredentialsMap,
 ): FormErrors {
   const errors: FormErrors = {};
 
@@ -87,6 +88,17 @@ function validateForm(
 
   if (!cred.username.trim()) {
     errors.username = 'Username / DMAT is required';
+  } else if (cred.DP_CODE && cred.username.trim() && allCredentials) {
+    const dupName = Object.entries(allCredentials).find(
+      ([name, c]) =>
+        name !== editingName &&
+        name !== trimmedName &&
+        c.DP_CODE === cred.DP_CODE &&
+        c.username.trim() === cred.username.trim(),
+    );
+    if (dupName) {
+      errors.username = `Same DP + DMAT as "${dupName[0]}" — they would log into the same Meroshare account`;
+    }
   }
 
   if (!cred.password.trim()) {
@@ -238,7 +250,7 @@ export default function CredentialManager({ onCredentialsChange }: Props) {
   const handleBlur = (field: string) => {
     setTouched((prev) => ({ ...prev, [field]: true }));
     // Re-validate
-    const newErrors = validateForm(accountName, formData, accountNames, editingName);
+    const newErrors = validateForm(accountName, formData, accountNames, editingName, credentials);
     setErrors(newErrors);
   };
 
@@ -252,7 +264,7 @@ export default function CredentialManager({ onCredentialsChange }: Props) {
       crn: true,
     });
 
-    const newErrors = validateForm(accountName, formData, accountNames, editingName);
+    const newErrors = validateForm(accountName, formData, accountNames, editingName, credentials);
     setErrors(newErrors);
 
     if (Object.keys(newErrors).length > 0) return;
@@ -361,10 +373,27 @@ export default function CredentialManager({ onCredentialsChange }: Props) {
               {accountNames.map((name) => {
                 const cred = credentials[name];
                 const dpInfo = COMMON_DPS.find((d) => d.code === cred.DP_CODE);
+                const dupAccount = accountNames.find(
+                  (other) =>
+                    other !== name &&
+                    credentials[other].DP_CODE === cred.DP_CODE &&
+                    credentials[other].username.trim() === cred.username.trim(),
+                );
                 return (
                   <div key={name} className="cred-card">
                     <div className="cred-card-main">
-                      <div className="cred-card-name">{name}</div>
+                      <div className="cred-card-name">
+                        {name}
+                        {dupAccount && (
+                          <span
+                            className="cred-dup-badge"
+                            title={`Same DP + DMAT as "${dupAccount}" — they log into the same Meroshare account. Fix the username or DP_CODE.`}
+                            style={{ marginLeft: 8, color: '#e53e3e', fontSize: '0.75rem', fontWeight: 600 }}
+                          >
+                            ⚠ Duplicate login
+                          </span>
+                        )}
+                      </div>
                       <div className="cred-card-details">
                         <span className="cred-detail">
                           <span className="cred-detail-label">DMAT:</span> {cred.username}

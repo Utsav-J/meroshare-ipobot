@@ -1,0 +1,11 @@
+node_modules
+webapp/node_modules
+webapp/dist
+.env
+*credentials.json
+test-results
+playwright-report
+blob-report
+.git
+*.md
+tests
